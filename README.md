@@ -204,3 +204,196 @@ The strongest absolute correlation was between `order_amount` and `discount_pct`
 #### EDA observations
 
 The data represents completed customer orders across six cities and five product categories. Order amounts are strongly right-skewed, with a mean of INR 269.91 and a median of INR 135.00. The analysis identified 897 high-value outliers above the upper IQR fence and no outliers below the lower fence. The strongest absolute relationship was a weak negative correlation between order amount and discount percentage (-0.095); this does not establish causation.
+
+
+## Part B – Customer Segments and Lapse Prediction
+
+### 1. RFM Analysis
+
+Built an RFM table using completed orders for 1,175 customers.
+
+- **Recency:** Days since the customer's last completed order, calculated relative to 1 October 2025.
+- **Frequency:** Number of completed orders.
+- **Monetary:** Total completed order amount in INR.
+
+| Metric | Recency | Frequency | Monetary (INR) |
+|---|---:|---:|---:|
+| Mean | 33.56 | 9.46 | 2,552.06 |
+| Median | 19 | 5 | 2,286.50 |
+| Minimum | 0 | 1 | 12.00 |
+| Maximum | 180 | 33 | 14,766.55 |
+
+### 2. Customer Segmentation
+
+Applied StandardScaler to the RFM features and evaluated K-Means for K values from 2 to 8, using inertia and silhouette scores.
+
+Selected **K = 4** because it achieved the highest silhouette score (0.526) among the tested values, with a useful balance between cluster separation and business interpretability.
+
+| K | Inertia | Silhouette |
+|---:|---:|---:|
+| 2 | 1820.76 | 0.465 |
+| 3 | 1268.23 | 0.445 |
+| 4 | 743.07 | 0.526 |
+| 5 | 617.37 | 0.480 |
+| 6 | 503.17 | 0.482 |
+| 7 | 408.46 | 0.416 |
+| 8 | 366.50 | 0.412 |
+
+#### Segment Profiles
+
+| Segment | Customers | Avg. Recency | Avg. Frequency | Avg. Monetary (INR) | Business Interpretation |
+|---|---:|---:|---:|---:|---|
+| 0 | 436 | 28.86 | 3.77 | 1,057.62 | Occasional Customers |
+| 1 | 138 | 24.12 | 6.77 | 7,129.70 | Premium Customers |
+| 2 | 419 | 8.77 | 19.40 | 3,410.02 | Loyal Customers |
+| 3 | 182 | 109.04 | 2.20 | 685.99 | At-Risk Customers |
+
+Premium customers were identified using segment 1, resulting in 138 premium customers.
+
+#### PCA Analysis
+
+Applied PCA to the scaled RFM features to reduce them to two dimensions.
+
+| Component | Explained Variance |
+|---|---:|
+| Principal Component 1 | 0.634 |
+| Principal Component 2 | 0.218 |
+| Total | 0.852 |
+
+The first two components retain 85.2% of the variance in the original RFM features.
+
+### 3. Lapse Prediction Dataset
+
+Created a customer-level prediction dataset using 1 September 2025 as the cutoff date.
+
+- Customers were included if they had at least one completed order before the cutoff.
+- A customer was labelled as lapsed (1) if they had no completed order during September 2025.
+- A customer was labelled as not lapsed (0) if they had at least one completed order during September 2025.
+- Prediction features were calculated using historical information before the cutoff date.
+
+| Metric | Result |
+|---|---:|
+| Total customers | 1,156 |
+| Lapsed customers | 443 |
+| Not-lapsed customers | 713 |
+| Lapse percentage | 38.32% |
+
+All generated prediction features had zero missing values.
+
+### 4. Model Training and Evaluation
+
+Used a stratified 80/20 train-test split with random_state=42.
+
+- Training customers: 924
+- Testing customers: 232
+- Numerical features were scaled using StandardScaler.
+- Categorical features were encoded using OneHotEncoder with drop-first encoding.
+- Preprocessing was fitted within the model pipeline, using training data only.
+
+#### Baseline Model
+
+The baseline predicted every customer as not lapsed.
+
+| Metric | Score |
+|---|---:|
+| Accuracy | 0.616 |
+| Precision | 0.000 |
+| Recall | 0.000 |
+| F1 Score | 0.000 |
+
+The baseline failed to identify any lapsed customers, demonstrating why accuracy alone is insufficient.
+
+#### Model Comparison
+
+Logistic Regression was tuned using GridSearchCV over C values [0.01, 0.1, 1, 10, 100].
+
+Random Forest was tuned over max_depth [3, 5, 8] and min_samples_leaf [5, 10, 20].
+
+Both models used 5-fold cross-validation with F1 scoring.
+
+| Metric | Logistic Regression | Random Forest |
+|---|---:|---:|
+| Best Parameters | C = 100 | Depth = 5, Leaf = 10 |
+| Cross-validation F1 | 0.651 | 0.684 |
+| Test Accuracy | 0.728 | 0.720 |
+| Test Precision | 0.644 | 0.630 |
+| Test Recall | 0.652 | 0.652 |
+| Test F1 | 0.648 | 0.641 |
+
+The original Logistic Regression model was selected over Random Forest because it achieved slightly higher test F1, precision, and accuracy on the untouched test set.
+
+#### Oversampling Experiment
+
+The training dataset was balanced by randomly oversampling the lapsed class with replacement. The test dataset remained unchanged.
+
+Balanced training distribution:
+
+- Not-lapsed: 570
+- Lapsed: 570
+
+| Metric | Before Oversampling | After Oversampling |
+|---|---:|---:|
+| Accuracy | 0.728 | 0.720 |
+| Precision | 0.644 | 0.600 |
+| Recall | 0.652 | 0.809 |
+| F1 Score | 0.648 | 0.689 |
+
+Oversampling improved recall and F1, identifying more potentially lapsed customers. However, precision decreased, resulting in more false-positive retention targets.
+
+The original Logistic Regression model was retained as the selected model because it offered higher precision and fewer false positives for the illustrative retention list. The oversampled model is retained as a comparison experiment.
+
+### 5. Feature Interpretation
+
+#### Top Random Forest Features
+
+| Feature | Importance |
+|---|---:|
+| Frequency | 0.3533 |
+| Monetary | 0.2279 |
+| Recency | 0.0973 |
+| Cancellation Rate | 0.0951 |
+| Average Discount | 0.0508 |
+
+Frequency and monetary value were the most influential features in the Random Forest model.
+
+#### Logistic Regression Coefficients
+
+Selected examples:
+
+| Feature | Coefficient | Interpretation |
+|---|---:|---|
+| Frequency | -1.6986 | Higher frequency is associated with lower lapse probability. |
+| Electronics category | -0.9869 | Lower lapse probability relative to the reference category. |
+| Delhi city | -0.6406 | Lower lapse probability relative to the reference city. |
+
+Positive coefficients indicate an association with higher lapse probability, while negative coefficients indicate an association with lower lapse probability. These coefficients do not establish causation.
+
+### 6. Premium Customer Retention List
+
+Used the selected Logistic Regression model to calculate lapse probabilities for premium customers in the test set.
+
+| Metric | Result |
+|---|---:|
+| Premium customers in test set | 40 |
+| Customers shortlisted | 10 |
+| Highest predicted lapse probability | 72.76% |
+| Actually lapsed among top 10 | 2 |
+
+The top 10 customers were ranked by predicted lapse probability and saved to `outputs/retention_list.csv`.
+
+### 7. Generated Outputs
+
+- `outputs/rfm.csv`
+- `outputs/customer_segments.csv`
+- `outputs/lapse_dataset.csv`
+- `outputs/lapse_model.joblib`
+- `outputs/retention_list.csv`
+
+The saved model was reloaded and tested. Its predictions were identical to those of the original model.
+
+### Limitations
+
+- The premium segment was generated using full-period RFM information, including data after the lapse prediction cutoff. Therefore, the premium retention list is illustrative and is not a leakage-free evaluation of premium targeting.
+- The dataset is synthetic and may not represent real customer behaviour.
+- Oversampling improves recall but reduces precision, which may increase retention campaign costs.
+- Feature importance and model coefficients indicate associations, not causation.
