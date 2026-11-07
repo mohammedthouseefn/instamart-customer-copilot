@@ -93,25 +93,25 @@ python pandas_analysis.py
 
 Optional: Run `generate_data.py` only if you need to regenerate the supplied datasets.
 
-Part B — Lapse prediction:
+### Part B — Lapse prediction:
 
 ```powershell
 python train_lapse_model.py
 ```
 
-Part C — Ticket triage:
+### Part C — Ticket triage:
 
 ```powershell
 python triage_tickets.py
 ```
 
-Part D — Policy RAG evaluation:
+### Part D — Policy RAG evaluation:
 
 ```powershell
 python policy_rag.py
 ```
 
-Part D — Agent scenarios:
+### Part D — Agent scenarios:
 
 ```powershell
 python test_agent.py
