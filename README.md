@@ -1,3 +1,50 @@
+# Instamart Customer Copilot
+
+## Overview
+
+Instamart Customer Copilot is a course-based AI and data analytics project that combines customer analytics, machine learning, ticket classification, policy-based retrieval, and tool-using AI agents.
+
+The project is organized into four parts, following the course requirements.
+
+## Project Objectives
+
+- Audit and clean customer, order, product, and ticket datasets.
+- Analyze customer purchasing behavior and segment customers.
+- Build a machine learning model to identify customers at risk of lapsing.
+- Classify customer support tickets while applying input validation and PII protection.
+- Build a policy-based retrieval system and an AI agent that can use tools to handle customer requests safely.
+
+## Project Structure
+
+The project contains the following main directories and files:
+
+| Path | Description |
+|---|---|
+| `data/raw/` | Original course datasets |
+| `data/clean/` | Cleaned datasets |
+| `data/policies/` | Customer policy documents |
+| `sql/` | SQL queries |
+| `outputs/` | Generated analysis, model, evaluation, and agent outputs |
+| `state/` | Agent checkpoint files |
+| `requirements.txt` | Python dependencies |
+| `README.md` | Project documentation |
+
+Python scripts are maintained in the project root.
+
+## Technology Stack
+
+- Python
+- Pandas
+- NumPy
+- SQLite
+- Scikit-learn
+- TF-IDF and cosine similarity
+- K-Means clustering
+- PCA
+- Logistic Regression
+- Random Forest
+- Mock LLM and tool-calling workflow
+
 ## Part A – Data Foundation: Clean, Store, Query
 
 ### 1. Raw Data Audit
@@ -584,12 +631,14 @@ Compared two chunking configurations:
 
 #### Observations
 
-- With 10-word overlap, all 12 answerable questions returned the expected facts.
-- With zero overlap, retrieval still found all 12 expected policy documents, but only 10 expected facts were found.
-- Two expected facts were missed without overlap, demonstrating how important information can be split across chunk boundaries.
-- Both configurations correctly handled the two unanswerable questions using the fallback response.
+- **10-word overlap:** All 12 answerable questions returned their expected facts (12/12).
+- **Zero overlap:** All 12 expected policy documents were retrieved, but only 10 answers contained the expected facts (10/12).
+- The two missed facts without overlap were:
+  1. **Refund eligibility:** The answer omitted the `more than 45 minutes` delivery threshold.
+  2. **Failed payment refund:** The answer omitted the `48 hours` refund timeframe.
+- Both configurations correctly returned fallback responses for the two unanswerable questions (2/2).
 
-**Conclusion:** The 10-word overlap configuration achieved 100% expected-fact accuracy in this evaluation, compared with 83.33% for zero overlap.
+**Conclusion:** Using a 10-word overlap improved expected-fact accuracy from 83.33% to 100% in this evaluation. This demonstrates how chunk overlap helps preserve important policy information across chunk boundaries.
 
 ### 5. Refund Agent Tools
 
@@ -729,7 +778,81 @@ The model-call figures above are measured for ReAct. A separate plan-and-execute
 - `outputs/refund_ledger.jsonl` – refund and escalation records.
 - `state/` – saved agent checkpoints.
 
-### 12. Limitations and Next Steps
+## Setup and Installation
+
+### Prerequisites
+
+- Python 3.10 or later
+- Git
+
+### Clone the repository
+
+```bash
+git clone https://github.com/mohammedthouseefn/instamart-customer-copilot.git
+cd instamart-customer-copilot
+```
+
+### Create and activate a virtual environment
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### Install dependencies
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+## Running the Project
+
+Run the relevant Python scripts from the project root.
+
+### Part A — Data Foundation
+
+Run the following scripts in order:
+
+```powershell
+python audit_raw_data.py
+python clean_data.py
+python validate_data.py
+python store_database.py
+python run_sql.py
+python pandas_analysis.py
+```
+
+Optional: Run `generate_data.py` only if you need to regenerate the supplied datasets.
+
+Part B — Lapse prediction:
+
+```powershell
+python train_lapse_model.py
+```
+
+Part C — Ticket triage:
+
+```powershell
+python triage_tickets.py
+```
+
+Part D — Policy RAG evaluation:
+
+```powershell
+python policy_rag.py
+```
+
+Part D — Agent scenarios:
+
+```powershell
+python test_agent.py
+```
+
+Generated results are stored in the `outputs/` directory.
+
+## Limitations and Next Steps
 
 - The project uses an offline mock LLM rather than a production LLM.
 - TF-IDF retrieval relies on word matching and does not provide semantic understanding.
@@ -737,3 +860,9 @@ The model-call figures above are measured for ReAct. A separate plan-and-execute
 - The refund workflow uses predefined business rules and a sample SQLite database.
 - The time limit is checked between model calls; an individual model call may take longer than the configured limit.
 - A production implementation would benefit from embedding-based retrieval, a real LLM, stronger tool validation, and persistent checkpoint storage.
+
+## Conclusion
+
+This project demonstrates an end-to-end workflow covering data preparation, customer analytics, machine learning, support ticket automation, policy retrieval, and tool-using AI agents.
+
+It also explores practical AI engineering concerns such as PII protection, token limits, execution timeouts, fallback handling, and checkpoint-based recovery.
