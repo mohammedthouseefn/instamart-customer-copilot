@@ -45,6 +45,80 @@ Python scripts are maintained in the project root.
 - Random Forest
 - Mock LLM and tool-calling workflow
 
+## Reproduce
+
+### Prerequisites
+
+- Python 3.10 or later
+- Git
+
+### Clone the repository
+
+```bash
+git clone https://github.com/mohammedthouseefn/instamart-customer-copilot.git
+cd instamart-customer-copilot
+```
+
+### Create and activate a virtual environment
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### Install dependencies
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+### Running the Project
+
+Run the relevant Python scripts from the project root.
+
+### Part A — Data Foundation
+
+Run the following scripts in order:
+
+```powershell
+python audit_raw_data.py
+python clean_data.py
+python validate_data.py
+python store_database.py
+python run_sql.py
+python pandas_analysis.py
+```
+
+Optional: Run `generate_data.py` only if you need to regenerate the supplied datasets.
+
+Part B — Lapse prediction:
+
+```powershell
+python train_lapse_model.py
+```
+
+Part C — Ticket triage:
+
+```powershell
+python triage_tickets.py
+```
+
+Part D — Policy RAG evaluation:
+
+```powershell
+python policy_rag.py
+```
+
+Part D — Agent scenarios:
+
+```powershell
+python test_agent.py
+```
+
+Generated results are stored in the `outputs/` directory.
+
 ## Part A – Data Foundation: Clean, Store, Query
 
 ### 1. Raw Data Audit
@@ -778,79 +852,6 @@ The model-call figures above are measured for ReAct. A separate plan-and-execute
 - `outputs/refund_ledger.jsonl` – refund and escalation records.
 - `state/` – saved agent checkpoints.
 
-## Setup and Installation
-
-### Prerequisites
-
-- Python 3.10 or later
-- Git
-
-### Clone the repository
-
-```bash
-git clone https://github.com/mohammedthouseefn/instamart-customer-copilot.git
-cd instamart-customer-copilot
-```
-
-### Create and activate a virtual environment
-
-Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-### Install dependencies
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-## Running the Project
-
-Run the relevant Python scripts from the project root.
-
-### Part A — Data Foundation
-
-Run the following scripts in order:
-
-```powershell
-python audit_raw_data.py
-python clean_data.py
-python validate_data.py
-python store_database.py
-python run_sql.py
-python pandas_analysis.py
-```
-
-Optional: Run `generate_data.py` only if you need to regenerate the supplied datasets.
-
-Part B — Lapse prediction:
-
-```powershell
-python train_lapse_model.py
-```
-
-Part C — Ticket triage:
-
-```powershell
-python triage_tickets.py
-```
-
-Part D — Policy RAG evaluation:
-
-```powershell
-python policy_rag.py
-```
-
-Part D — Agent scenarios:
-
-```powershell
-python test_agent.py
-```
-
-Generated results are stored in the `outputs/` directory.
 
 ## Limitations and Next Steps
 
