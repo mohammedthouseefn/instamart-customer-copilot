@@ -507,3 +507,233 @@ Priority distribution:
 - Invalid model responses are routed to human review.
 - Regular-expression redaction depends on the supported PII patterns and may not identify every possible sensitive-data format.
 - The token budget is checked before each model call, so a permitted call can cause the running total to exceed the configured limit.
+
+
+## Part D – Policy RAG Assistant and Refund Agent
+
+### 1. Policy Document Chunking
+
+Loaded five policy text files from `data/policies/` and split them into chunks of 40 words with a 10-word overlap.
+
+| Policy document | Chunks |
+|---|---:|
+| Refund | 4 |
+| Delivery | 3 |
+| Escalation | 3 |
+| Payment | 3 |
+| Privacy | 2 |
+| **Total** | **15** |
+
+The overlap preserves context between consecutive chunks and reduces the chance of splitting important policy information across chunk boundaries.
+
+### 2. TF-IDF Retrieval
+
+Implemented document retrieval using Scikit-learn's `TfidfVectorizer` and cosine similarity.
+
+- **Term Frequency (TF):** Measures how frequently a word appears in a document.
+- **Inverse Document Frequency (IDF):** Gives more importance to words that are less common across the documents.
+- **Cosine Similarity:** Measures similarity between the question vector and policy chunk vectors.
+
+The `retrieve(query, k=3)` function returns the three most relevant policy chunks, including their source filenames and similarity scores.
+
+**Limitation:** TF-IDF relies on word matching. It may not understand synonyms, context, or semantic similarity as effectively as embedding-based retrieval.
+
+### 3. Retrieval-Augmented Generation (RAG)
+
+Implemented an `answer(question)` function that:
+
+1. Retrieves the top three relevant policy chunks.
+2. Builds a context containing source filenames and chunk text.
+3. Sends the context and question to the mock LLM.
+4. Instructs the model to answer only using the supplied policy context.
+5. Returns a fallback response when the required information is unavailable.
+
+The system prompt identifies the model as a `POLICY ASSISTANT` and restricts answers to the supplied policy context.
+
+Fallback response:
+
+`I could not find the information in the supplied policies.`
+
+### 4. Policy Retrieval Evaluation
+
+Evaluated the policy assistant using `data/raw/policy_eval.csv`, containing 14 questions:
+
+- 12 answerable questions.
+- 2 unanswerable questions.
+
+The evaluation checks:
+
+- Whether the expected policy document appears in the retrieved top three chunks.
+- Whether the expected fact appears in the generated answer.
+- Whether unanswerable questions receive the expected fallback response.
+
+Compared two chunking configurations:
+
+| Configuration | Chunk size | Overlap |
+|---|---:|---:|
+| Normal chunking | 40 words | 10 words |
+| Zero-overlap chunking | 40 words | 0 words |
+
+#### Evaluation Results
+
+| Metric | 10-word overlap | Zero overlap |
+|---|---:|---:|
+| Answerable retrieval hits | 12/12 | 12/12 |
+| Expected facts found | 12/12 | 10/12 |
+| Unanswerable fallback hits | 2/2 | 2/2 |
+
+#### Observations
+
+- With 10-word overlap, all 12 answerable questions returned the expected facts.
+- With zero overlap, retrieval still found all 12 expected policy documents, but only 10 expected facts were found.
+- Two expected facts were missed without overlap, demonstrating how important information can be split across chunk boundaries.
+- Both configurations correctly handled the two unanswerable questions using the fallback response.
+
+**Conclusion:** The 10-word overlap configuration achieved 100% expected-fact accuracy in this evaluation, compared with 83.33% for zero overlap.
+
+### 5. Refund Agent Tools
+
+Implemented five tools for the customer refund workflow.
+
+| Tool | Responsibility |
+|---|---|
+| `get_order` | Retrieves order details from SQLite. |
+| `search_policy` | Searches the policy documents. |
+| `calculate_refund` | Calculates the eligible refund amount. |
+| `issue_refund` | Records an approved refund in the refund ledger. |
+| `escalate_to_human` | Records refunds requiring human approval. |
+
+Defined tool specifications in `TOOLS_SPEC` and mapped tool names to their Python implementations using `TOOL_MAP`.
+
+Refund calculation follows the delivery policy. Refunds above INR 1,000 require human approval.
+
+### 6. ReAct Agent Implementation
+
+Implemented a ReAct-style agent using the mock LLM.
+
+The agent follows an iterative workflow:
+
+1. Receives a customer request.
+2. Calls the appropriate tool.
+3. Observes the tool result.
+4. Uses the observation to decide the next action.
+5. Continues until it produces a final response or reaches a safety limit.
+
+#### Safety Controls
+
+| Control | Configuration |
+|---|---:|
+| Maximum iterations | 6 |
+| Token limit | 6,000 |
+| Time limit | 10 seconds |
+| Checkpoint frequency | After every tool observation |
+
+The agent supports fallback responses for:
+
+- `FALLBACK_TOKEN_LIMIT`
+- `FALLBACK_TIMEOUT`
+- `FALLBACK_MAX_ITERATIONS`
+
+### 7. Agent Scenario Evaluation
+
+Executed all seven supplied agent scenarios using `test_agent.py`.
+
+| Scenario | Final status | LLM calls | Tokens used |
+|---|---|---:|---:|
+| S1 | REFUND | 5 | 1,073 |
+| S2 | REFUND | 5 | 1,073 |
+| S3 | ESCALATE | 5 | 1,060 |
+| S4 | DENIED | 4 | 738 |
+| S5 | DENIED | 3 | 431 |
+| S6 | NOT_FOUND | 2 | 131 |
+| S7 | FALLBACK_MAX_ITERATIONS | 6 | 3,228 |
+
+The agent generated the scenario results in `outputs/agent_runs.jsonl`.
+
+Refund and escalation actions were recorded in `outputs/refund_ledger.jsonl`.
+
+### 8. Token Limit and Timeout Demonstrations
+
+#### Token Limit Demonstration
+
+Configured a token limit of 200.
+
+| Metric | Result |
+|---|---|
+| Status | FALLBACK_TOKEN_LIMIT |
+| LLM calls | 3 |
+| Tools executed | 2 |
+| Tokens before fallback | 161 |
+
+The agent stopped before executing a tool call that would exceed the configured token budget.
+
+#### Timeout Demonstration
+
+Configured the time limit as zero seconds.
+
+| Metric | Result |
+|---|---|
+| Status | FALLBACK_TIMEOUT |
+| LLM calls | 0 |
+| Tools executed | 0 |
+
+The agent checked the elapsed time before making its first model call and returned the timeout fallback.
+
+### 9. Checkpoint and Resume Demonstration
+
+Implemented checkpointing to save the agent's state after every tool observation.
+
+The checkpoint stores:
+
+- Conversation messages.
+- Executed tools and their observations.
+- Number of LLM calls.
+- Tokens used.
+- Iteration count.
+- Execution steps.
+
+Simulated a crash after the second tool execution, after saving the checkpoint.
+
+Resumed the agent using the saved checkpoint.
+
+#### Resume Results
+
+| Metric | Result |
+|---|---|
+| Final status | REFUND |
+| Refund amount | INR 128.25 |
+| LLM calls | 5 |
+| Tokens used | 1,073 |
+
+**Resumed tool execution order:**
+
+`get_order → search_policy → calculate_refund → issue_refund`
+
+The agent continued from the saved state without repeating the first two tool executions.
+
+### 10. ReAct vs Plan-and-Execute
+
+ReAct performs reasoning and tool execution iteratively. It uses each tool observation to determine the next action. In this implementation, model calls varied by scenario: S1 required 5 calls, S5 required 3, and S6 required 2.
+
+Plan-and-execute separates planning from execution. It creates a plan first and then executes the planned steps. This can make workflows more predictable, but unexpected tool observations may require replanning.
+
+For this project, ReAct was selected because refund decisions depend on order details and policy results. The agent can use each observation before deciding whether to calculate a refund, issue it, or escalate it.
+
+The model-call figures above are measured for ReAct. A separate plan-and-execute benchmark was not implemented.
+
+### 11. Generated Outputs
+
+- `policy_rag.py` – policy chunking, TF-IDF retrieval, RAG evaluation, refund tools, and agent implementation.
+- `test_agent.py` – executes the seven agent scenarios.
+- `outputs/agent_runs.jsonl` – agent scenario results.
+- `outputs/refund_ledger.jsonl` – refund and escalation records.
+- `state/` – saved agent checkpoints.
+
+### 12. Limitations and Next Steps
+
+- The project uses an offline mock LLM rather than a production LLM.
+- TF-IDF retrieval relies on word matching and does not provide semantic understanding.
+- The policy evaluation dataset contains only 14 questions.
+- The refund workflow uses predefined business rules and a sample SQLite database.
+- The time limit is checked between model calls; an individual model call may take longer than the configured limit.
+- A production implementation would benefit from embedding-based retrieval, a real LLM, stronger tool validation, and persistent checkpoint storage.
