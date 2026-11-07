@@ -397,3 +397,113 @@ The saved model was reloaded and tested. Its predictions were identical to those
 - The dataset is synthetic and may not represent real customer behaviour.
 - Oversampling improves recall but reduces precision, which may increase retention campaign costs.
 - Feature importance and model coefficients indicate associations, not causation.
+
+
+## Part C — Support Ticket Triage with Guardrails
+
+### 1. Input Guardrails
+
+Processed 164 support tickets:
+- Empty tickets: 4 — skipped with `skipped_empty`.
+- Long tickets: 4 — flagged with `flagged_long`.
+- Eligible tickets: 156.
+
+Empty and long tickets were never sent to the mock LLM.
+
+### 2. PII Redaction
+
+Applied regular-expression redaction in the required order:
+1. Email addresses → `[EMAIL]`
+2. Phone numbers → `[PHONE]`
+3. Order IDs → `[ORDER_ID]`
+
+| PII type | Values redacted |
+|---|---:|
+| Emails | 55 |
+| Phone numbers | 91 |
+| Order IDs | 132 |
+| **Total substitutions** | **278** |
+
+PII verification passed, with zero remaining matches.
+
+### 3. Zero-shot vs Few-shot Classification
+
+Both prompts instructed the model to classify tickets into billing, delivery, technical, or fraud and return JSON-only output.
+
+| Metric | Zero-shot | Few-shot |
+|---|---:|---:|
+| Classified tickets | 147 | 147 |
+| Correct predictions | 126 | 147 |
+| Accuracy | 85.71% | 100% |
+| Total tokens | 10,492 | 19,228 |
+| Tokens per classified ticket | 71.37 | 130.80 |
+
+Few-shot prompting improved accuracy by 14.29 percentage points and corrected 21 additional predictions.
+
+The few-shot approach consumed 8,736 additional tokens, approximately 59.43 more tokens per classified ticket.
+
+### 4. Response Validation and Retry Handling
+
+Responses were validated as JSON with an allowed category. If JSON validation failed, a keyword fallback accepted a response only when exactly one allowed category was detected. Invalid or unsupported responses were flagged for human review rather than guessed.
+
+Final few-shot status counts:
+
+| Status | Tickets |
+|---|---:|
+| classified_json | 135 |
+| classified_keyword | 12 |
+| flagged_invalid_output | 9 |
+| skipped_empty | 4 |
+| flagged_long | 4 |
+| **Total** | **164** |
+
+The mock LLM was reset before each complete run. Transient failures were retried with exponential backoff and jitter, with a maximum of three retries per ticket. All 19 transient errors recovered successfully during each run.
+
+### 5. Token Budget Demonstration
+
+Ran zero-shot classification with a token budget of 6,000.
+
+| Metric | Result |
+|---|---:|
+| Configured budget | 6,000 |
+| Tokens consumed | 6,052 |
+| Classified tickets | 85 |
+| Budget-exhausted tickets | 66 |
+
+The final permitted model call took the running total to 6,052. Subsequent tickets were marked `budget_exhausted` without further model calls.
+
+### 6. Customer-based Routing
+
+The final few-shot results were joined with customer segment information.
+
+Routing rules:
+- Empty, long, invalid-output, or budget-exhausted tickets → `human_review`, NORMAL.
+- Fraud tickets → `security_team`, HIGH.
+- Premium customers → `premium_desk`, HIGH.
+- Other valid tickets → `support_queue`, NORMAL.
+
+| Route | Tickets |
+|---|---:|
+| support_queue | 102 |
+| security_team | 34 |
+| human_review | 17 |
+| premium_desk | 11 |
+| **Total** | **164** |
+
+Priority distribution:
+- HIGH: 45
+- NORMAL: 119
+
+### 7. Output Files
+
+- `triage_tickets.py` — ticket processing, redaction, classification, validation, retries, budget enforcement, and routing.
+- `outputs/triage_results.csv` — final 164-ticket classification and routing results.
+- `outputs/triage_budget_demo.csv` — zero-shot token budget demonstration.
+
+### 8. Limitations
+
+- Classification uses the supplied offline mock LLM, not a production language model.
+- Few-shot prompting improves accuracy in this evaluation but requires more tokens.
+- Invalid model responses are routed to human review.
+- Regular-expression redaction depends on the supported PII patterns and may not identify every possible sensitive-data format.
+- The token budget is checked before each model call, so a permitted call can cause the running total to exceed the configured limit.
